@@ -14,7 +14,7 @@ import {
   onAuthStateChanged
 } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js";
 
-// Same Firebase app use karo
+// Firebase Auth
 const auth = getAuth(app);
 
 // HTML elements
@@ -29,34 +29,40 @@ const bookingList = document.getElementById("bookingList");
 loginForm.addEventListener("submit", async (e) => {
   e.preventDefault();
 
-  loginError.textContent = "Logging in...";
-
-  const email = document.getElementById("email").value.trim();
+  const email = document.getElementById("email").value.trim().toLowerCase();
   const password = document.getElementById("password").value;
 
+  loginError.textContent = "Logging in...";
+
   try {
-    await signInWithEmailAndPassword(auth, email, password);
+    const userCredential = await signInWithEmailAndPassword(
+      auth,
+      email,
+      password
+    );
+
+    console.log("Login successful:", userCredential.user.email);
     loginError.textContent = "";
 
- } catch (error) {
-  console.error("Login Error:", error);
+  } catch (error) {
+    console.error("LOGIN ERROR CODE:", error.code);
+    console.error("LOGIN ERROR:", error);
 
-  loginError.textContent =
-    error.code + " : " + error.message;
-}
+    loginError.textContent =
+      "Error: " + error.code;
+  }
 });
 
 // CHECK LOGIN STATUS
 onAuthStateChanged(auth, (user) => {
+  console.log("Auth user:", user);
+
   if (user) {
-    // User logged in
     loginSection.classList.add("hidden");
     adminSection.classList.remove("hidden");
 
     loadBookings();
-
   } else {
-    // User logged out
     loginSection.classList.remove("hidden");
     adminSection.classList.add("hidden");
   }
@@ -71,7 +77,7 @@ logoutBtn.addEventListener("click", async () => {
   }
 });
 
-// LOAD ALL BOOKINGS
+// LOAD BOOKINGS
 async function loadBookings() {
   try {
     bookingList.innerHTML = "Loading bookings...";
@@ -84,9 +90,7 @@ async function loadBookings() {
 
     if (querySnapshot.empty) {
       bookingList.innerHTML = `
-        <div class="loading">
-          No bookings yet.
-        </div>
+        <div class="loading">No bookings yet.</div>
       `;
       return;
     }
@@ -98,7 +102,6 @@ async function loadBookings() {
 
       bookingList.innerHTML += `
         <div class="booking-card">
-
           <div class="booking-top">
             <div>
               <h3>${booking.name || "Customer"}</h3>
@@ -111,29 +114,13 @@ async function loadBookings() {
           </div>
 
           <div class="booking-details">
-            <div>
-              <strong>Service:</strong>
-              ${booking.service || "-"}
-            </div>
-
-            <div>
-              <strong>Date:</strong>
-              ${booking.date || "-"}
-            </div>
-
-            <div>
-              <strong>Time:</strong>
-              ${booking.time || "-"}
-            </div>
-
-            <div>
-              <strong>Message:</strong>
-              ${booking.message || "-"}
-            </div>
+            <div><strong>Service:</strong> ${booking.service || "-"}</div>
+            <div><strong>Date:</strong> ${booking.date || "-"}</div>
+            <div><strong>Time:</strong> ${booking.time || "-"}</div>
+            <div><strong>Message:</strong> ${booking.message || "-"}</div>
           </div>
 
           <div class="booking-actions">
-
             <button
               class="approve-btn"
               onclick="updateBookingStatus('${bookingId}', 'approved')">
@@ -145,21 +132,14 @@ async function loadBookings() {
               onclick="updateBookingStatus('${bookingId}', 'cancelled')">
               CANCEL
             </button>
-
           </div>
-
         </div>
       `;
     });
 
   } catch (error) {
     console.error("Firestore Error:", error);
-
-    bookingList.innerHTML = `
-      <div class="loading">
-        Error loading bookings.
-      </div>
-    `;
+    bookingList.innerHTML = "Error loading bookings.";
   }
 }
 
@@ -168,16 +148,13 @@ window.updateBookingStatus = async function(id, status) {
   try {
     await updateDoc(
       doc(db, "bookings", id),
-      {
-        status: status
-      }
+      { status: status }
     );
 
-    // Updated bookings reload karo
     loadBookings();
 
   } catch (error) {
     console.error("Update Error:", error);
-    alert("Status update nahi hua. Dobara try karo.");
+    alert("Status update nahi hua.");
   }
 };
