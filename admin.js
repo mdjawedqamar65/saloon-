@@ -38,11 +38,12 @@ loginForm.addEventListener("submit", async (e) => {
     await signInWithEmailAndPassword(auth, email, password);
     loginError.textContent = "";
 
-  } catch (error) {
-    console.error("Login Error:", error);
+ } catch (error) {
+  console.error("Login Error:", error);
 
-    loginError.textContent = "Wrong email or password!";
-  }
+  loginError.textContent =
+    error.code + " : " + error.message;
+}
 });
 
 // CHECK LOGIN STATUS
