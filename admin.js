@@ -14,20 +14,8 @@ import {
   onAuthStateChanged
 } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js";
 
-import { initializeApp } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js";
-
-// Same Firebase configuration
-const firebaseConfig = {
-  apiKey: "AIzaSyDTCec6s4g50jxDFcp5InKaIWojZrjJgc",
-  authDomain: "sohana-beauty-saloon.firebaseapp.com",
-  projectId: "sohana-beauty-saloon",
-  storageBucket: "sohana-beauty-saloon.firebasestorage.app",
-  messagingSenderId: "454248308554",
-  appId: "1:454248308554:web:51044f7cf825824ffcebb3"
-};
-
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
+// Firebase app firebase-config.js me already initialize ho chuka hai
+const auth = getAuth();
 
 const loginForm = document.getElementById("loginForm");
 const loginError = document.getElementById("loginError");
@@ -45,7 +33,7 @@ loginForm.addEventListener("submit", async (e) => {
   try {
     await signInWithEmailAndPassword(
       auth,
-      document.getElementById("email").value,
+      document.getElementById("email").value.trim(),
       document.getElementById("password").value
     );
 
@@ -53,7 +41,7 @@ loginForm.addEventListener("submit", async (e) => {
 
   } catch (error) {
     console.error(error);
-    loginError.textContent = "Wrong email or password!";
+    loginError.textContent = error.message;
   }
 });
 
@@ -131,7 +119,7 @@ async function loadBookings() {
   }
 }
 
-// UPDATE STATUS
+// UPDATE BOOKING STATUS
 window.updateBookingStatus = async (id, status) => {
   try {
     await updateDoc(doc(db, "bookings", id), {
