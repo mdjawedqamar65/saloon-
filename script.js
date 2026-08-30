@@ -10,9 +10,21 @@ import {
 } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js";
 
 
-// ============================
+// ==========================================
+// CONFIGURATION
+// ==========================================
+
+// Razorpay PUBLIC Key ID yahan paste karo
+const RAZORPAY_KEY_ID = "rzp_live_TVxhxaQ2eSoKlc";
+
+// Cloudflare Worker URL
+const PAYMENT_API =
+  "https://sohana-payment.mdjawedqamar65.workers.dev/";
+
+
+// ==========================================
 // MOBILE MENU
-// ============================
+// ==========================================
 
 const menuBtn = document.getElementById("menuBtn");
 const navLinks = document.getElementById("navLinks");
@@ -30,9 +42,9 @@ if (menuBtn && navLinks) {
 }
 
 
-// ============================
-// BOOKING DATE
-// ============================
+// ==========================================
+// BOOKING DATE - PAST DATE DISABLED
+// ==========================================
 
 const dateInput = document.getElementById("date");
 
@@ -41,9 +53,9 @@ if (dateInput) {
 }
 
 
-// ============================
-// BOOKING FORM
-// ============================
+// ==========================================
+// BOOKING + RAZORPAY PAYMENT
+// ==========================================
 
 const bookingForm = document.getElementById("bookingForm");
 const formMessage = document.getElementById("formMessage");
@@ -51,66 +63,264 @@ const formMessage = document.getElementById("formMessage");
 if (bookingForm) {
 
   bookingForm.addEventListener("submit", async (e) => {
+
     e.preventDefault();
 
     const submitButton = bookingForm.querySelector(
       'button[type="submit"]'
     );
 
-    if (submitButton) {
-      submitButton.textContent = "PLEASE WAIT...";
-      submitButton.disabled = true;
-    }
+    const name = document.getElementById("name").value.trim();
+    const phone = document.getElementById("phone").value.trim();
 
-    if (formMessage) {
-      formMessage.textContent = "";
-    }
+    const serviceSelect = document.getElementById("service");
+    const amount = Number(serviceSelect.value);
 
-    try {
+    const selectedOption =
+      serviceSelect.options[serviceSelect.selectedIndex];
 
-      await addDoc(collection(db, "bookings"), {
-        name: document.getElementById("name").value.trim(),
-        phone: document.getElementById("phone").value.trim(),
-        service: document.getElementById("service").value,
-        date: document.getElementById("date").value,
-        time: document.getElementById("time").value,
-        message: document.getElementById("message").value.trim(),
-        status: "pending",
-        createdAt: serverTimestamp()
-      });
+    const serviceName =
+      selectedOption.dataset.name || selectedOption.textContent.trim();
 
-      if (formMessage) {
-        formMessage.style.color = "green";
-        formMessage.textContent =
-          "Appointment request sent successfully! ✨";
-      }
+    const date = document.getElementById("date").value;
+    const time = document.getElementById("time").value;
+    const message = document.getElementById("message").value.trim();
 
-      bookingForm.reset();
 
-    } catch (error) {
-
-      console.error("Booking Error:", error);
+    // Validate
+    if (!name || !phone || !amount || !date || !time) {
 
       if (formMessage) {
         formMessage.style.color = "red";
         formMessage.textContent =
-          "Booking failed: " + error.message;
+          "Please fill all required details.";
       }
 
-    } finally {
+      return;
+    }
+
+
+    // Check Razorpay Key
+    if (RAZORPAY_KEY_ID === "YOUR_RAZORPAY_KEY_ID") {
+
+      if (formMessage) {
+        formMessage.style.color = "red";
+        formMessage.textContent =
+          "Razorpay Key ID has not been added yet.";
+      }
+
+      return;
+    }
+
+
+    try {
 
       if (submitButton) {
-        submitButton.textContent = "REQUEST APPOINTMENT";
+        submitButton.textContent = "CREATING PAYMENT...";
+        submitButton.disabled = true;
+      }
+
+      if (formMessage) {
+        formMessage.style.color = "#333";
+        formMessage.textContent =
+          "Please wait...";
+      }
+
+
+      // ==========================================
+      // CREATE ORDER FROM CLOUDFLARE WORKER
+      // ==========================================
+
+      const response = await fetch(PAYMENT_API, {
+        method: "POST",
+
+        headers: {
+          "Content-Type": "application/json"
+        },
+
+        body: JSON.stringify({
+          amount: amount
+        })
+      });
+
+
+      const data = await response.json();
+
+
+      if (!response.ok || !data.success) {
+
+        console.error("Payment API Error:", data);
+
+        throw new Error(
+          data.message ||
+          data.error?.description ||
+          "Payment order could not be created."
+        );
+      }
+
+
+      // ==========================================
+      // OPEN RAZORPAY CHECKOUT
+      // ==========================================
+
+      const options = {
+
+        key: RAZORPAY_KEY_ID,
+
+        amount: data.order.amount,
+
+        currency: data.order.currency,
+
+        name: "Sohana Beauty Saloon",
+
+        description: serviceName,
+
+        order_id: data.order.id,
+
+
+        prefill: {
+          name: name,
+          contact: phone
+        },
+
+
+        notes: {
+          customer_name: name,
+          phone: phone,
+          service: serviceName,
+          appointment_date: date,
+          appointment_time: time,
+          special_request: message
+        },
+
+
+        handler: async function(paymentResponse) {
+
+          try {
+
+            // ======================================
+            // PAYMENT SUCCESS KE BAAD FIREBASE SAVE
+            // ======================================
+
+            await addDoc(collection(db, "bookings"), {
+
+              name: name,
+              phone: phone,
+
+              service: serviceName,
+              amount: amount,
+
+              date: date,
+              time: time,
+
+              message: message,
+
+              status: "pending",
+
+              paymentStatus: "paid",
+
+              razorpayPaymentId:
+                paymentResponse.razorpay_payment_id,
+
+              razorpayOrderId:
+                paymentResponse.razorpay_order_id,
+
+              razorpaySignature:
+                paymentResponse.razorpay_signature,
+
+              createdAt: serverTimestamp()
+            });
+
+
+            if (formMessage) {
+              formMessage.style.color = "green";
+              formMessage.textContent =
+                "Payment successful! Appointment booked successfully. ✨";
+            }
+
+
+            alert(
+              "Payment Successful! Your appointment has been booked."
+            );
+
+
+            bookingForm.reset();
+
+
+          } catch (error) {
+
+            console.error("Firebase Save Error:", error);
+
+            if (formMessage) {
+              formMessage.style.color = "red";
+              formMessage.textContent =
+                "Payment successful, but booking could not be saved. Please contact the salon.";
+            }
+
+          }
+
+        },
+
+
+        modal: {
+
+          ondismiss: function() {
+
+            if (formMessage) {
+              formMessage.style.color = "red";
+              formMessage.textContent =
+                "Payment cancelled.";
+            }
+
+          }
+
+        }
+
+      };
+
+
+      const razorpay = new Razorpay(options);
+
+
+      razorpay.open();
+
+
+      // Button popup open hone ke baad wapas active
+      if (submitButton) {
+        submitButton.textContent = "BOOK & PAY NOW";
         submitButton.disabled = false;
       }
+
+      if (formMessage) {
+        formMessage.textContent = "";
+      }
+
+
+    } catch (error) {
+
+      console.error("Payment Error:", error);
+
+      if (formMessage) {
+        formMessage.style.color = "red";
+        formMessage.textContent =
+          "Payment Error: " + error.message;
+      }
+
+      if (submitButton) {
+        submitButton.textContent = "BOOK & PAY NOW";
+        submitButton.disabled = false;
+      }
+
     }
+
   });
+
 }
 
 
-// ============================
+// ==========================================
 // CHECK BOOKING STATUS
-// ============================
+// ==========================================
 
 const statusForm = document.getElementById("statusForm");
 const statusPhone = document.getElementById("statusPhone");
@@ -124,26 +334,27 @@ if (statusForm && statusPhone && statusResult) {
 
     const phone = statusPhone.value.trim();
 
-    // Phone empty hai to
+
     if (!phone) {
+
       statusResult.innerHTML = `
         <p style="color:red; margin-top:15px;">
           Please enter your phone number.
         </p>
       `;
+
       return;
     }
 
-    // Turant message dikhega
+
     statusResult.innerHTML = `
       <p style="margin-top:20px; text-align:center;">
         Checking your booking...
       </p>
     `;
 
-    try {
 
-      console.log("Checking phone:", phone);
+    try {
 
       const bookingsRef = collection(db, "bookings");
 
@@ -154,9 +365,7 @@ if (statusForm && statusPhone && statusResult) {
 
       const querySnapshot = await getDocs(q);
 
-      console.log("Bookings found:", querySnapshot.size);
 
-      // Booking nahi mili
       if (querySnapshot.empty) {
 
         statusResult.innerHTML = `
@@ -178,7 +387,7 @@ if (statusForm && statusPhone && statusResult) {
       }
 
 
-      // Latest available matching booking
+      // Latest matching booking
       let booking = null;
 
       querySnapshot.forEach((bookingDoc) => {
@@ -186,9 +395,8 @@ if (statusForm && statusPhone && statusResult) {
       });
 
 
-      const status = String(
-        booking.status || "pending"
-      ).toLowerCase();
+      const status =
+        String(booking.status || "pending").toLowerCase();
 
 
       let statusText = "🟡 PENDING";
@@ -200,13 +408,13 @@ if (statusForm && statusPhone && statusResult) {
         statusColor = "green";
       }
 
+
       if (status === "cancelled") {
         statusText = "🔴 CANCELLED";
         statusColor = "red";
       }
 
 
-      // Result show
       statusResult.innerHTML = `
         <div style="
           margin-top:20px;
@@ -235,6 +443,11 @@ if (statusForm && statusPhone && statusResult) {
             ${booking.time || "-"}
           </p>
 
+          <p>
+            <strong>Payment:</strong>
+            ${booking.paymentStatus === "paid" ? "PAID" : "PENDING"}
+          </p>
+
           <h3 style="
             color:${statusColor};
             margin-top:20px;
@@ -260,18 +473,9 @@ if (statusForm && statusPhone && statusResult) {
           Error: ${error.message}
         </div>
       `;
+
     }
 
   });
 
-} else {
-
-  console.error(
-    "Status form elements not found:",
-    {
-      statusForm,
-      statusPhone,
-      statusResult
-    }
-  );
 }
