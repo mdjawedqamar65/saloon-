@@ -15,7 +15,7 @@ import {
 // ==========================================
 
 // Razorpay LIVE Public Key
-const RAZORPAY_KEY_ID = "rzp_live_TVxhxaQ2eSoKlc";
+const RAZORPAY_KEY_ID = "h";
 
 // Cloudflare Worker URL
 const PAYMENT_API = "https://sohana-payment.mdjawedqamar65.workers.dev/";
